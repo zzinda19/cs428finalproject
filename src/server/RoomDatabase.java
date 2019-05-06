@@ -19,10 +19,15 @@ import java.util.Random;
 
 import model.Room;
 
+/**
+ * @author zakzi
+ * RoomDatabase stores and retrieves all files requested by the server.
+ */
 public class RoomDatabase
 {
 	private HashMap<String, Room> rooms;
 	
+	//codeFile.txt will store all room codes/names for persistent access.
 	private static final String codeFileName = "codeFile.txt";
 	private static final String delimiter = ", ";
 	
@@ -34,7 +39,11 @@ public class RoomDatabase
 		getRoomsOnStartUp();
 	}
 	
-	public static RoomDatabase getDatabase()
+	/**
+	 *	RoomDatabase is a singleton, only one copy should ever
+	 *	exist or be accessed at a time.
+	 */
+	public static RoomDatabase getInstance()
 	{
 		if (database == null)
 		{
@@ -43,6 +52,10 @@ public class RoomDatabase
 		return database;
 	}
 	
+	/**
+	 * 	Reads codeFile.txt upon startup and
+	 *  re-creates all the corresponding rooms.
+	 */
 	private void getRoomsOnStartUp()
 	{
 		Path path = Paths.get(codeFileName);
@@ -73,6 +86,10 @@ public class RoomDatabase
 		}
 	}
 	
+	/**
+	 * Writes the room code and name to codeFile.txt to log
+	 * them for persistent access.
+	 */
 	private void writeKeyPairToDisk(String code, String name)
 	{
 		String keyPair = new String(code + delimiter + name + "\r\n");
@@ -103,6 +120,10 @@ public class RoomDatabase
 		}
 	}
 	
+	/**
+	 * Builds a new and unique 6-digit room code,
+	 * with only upper/lower characters and integers [0,9].
+	 */
 	public String getNewCode()
 	{
 		StringBuilder sb = new StringBuilder();
@@ -134,6 +155,8 @@ public class RoomDatabase
 			}
 		}
 		String roomCode = sb.toString();
+		// If this code already exists in the DB,
+		// make a new one--code must be unique.
 		if (containsCode(roomCode))
 		{
 			return getNewCode();
@@ -141,6 +164,10 @@ public class RoomDatabase
 		return roomCode;
 	}
 	
+	/**
+	 * Creates a new room with the specified name and
+	 * adds it to the DB, then returns it.
+	 */
 	public Room newRoom(String name)
 	{
 		String code = getNewCode();
@@ -149,16 +176,27 @@ public class RoomDatabase
 		return room;
 	}
 	
+	/**
+	 * Returns the requested room object.
+	 */
 	public Room joinRoom(String code)
 	{
 		return getRoom(code);
 	}
 	
+	/**
+	 * Returns whether or not this code is valid,
+	 * i.e., if it exists in the DB or not.
+	 */
 	public boolean isValidCode(String code)
 	{
 		return containsCode(code);
 	}
 	
+	/**
+	 * Writes a file to the specified room folder on the disk,
+	 * then updates the room object in the DB.
+	 */
 	public void addFileToRoom(String code, String fileName, byte[] fileContents) throws IOException
 	{
 		writeFileToDiskForRoom(code, fileName, fileContents);
@@ -167,11 +205,18 @@ public class RoomDatabase
 		updateRoom(code, room);
 	}
 	
+	/**
+	 * Gets the specified file contents in bytes.
+	 */
 	public byte[] getFileForRoom(String code, String fileName)  throws Exception
 	{
 		return retrieveFileContentsFromDisk(code, fileName);
 	}
 	
+	/**
+	 * Removes the specified file from the disk, 
+	 * then updates the room object in the DB.
+	 */
 	public Room deleteFileForRoom(String code, String fileName) throws Exception
 	{
 		removeFileFromDiskForRoom(code, fileName);
@@ -188,6 +233,9 @@ public class RoomDatabase
 		return room;
 	}
 	
+	/**
+	 * Writes a file to the disk in the specified room folder.
+	 */
 	private Path writeFileToDiskForRoom(String code, String fileName, byte[] fileContents) throws IOException
 	{
 		Path directory = Paths.get("db", code);
@@ -201,6 +249,9 @@ public class RoomDatabase
 		return path;
 	}
 	
+	/*
+	 * Retrieves the specified file from the disk for the specified room folder.
+	 */
 	private byte[] retrieveFileContentsFromDisk(String code, String fileName) throws Exception
 	{
 		Path path = Paths.get("db", code, fileName);
@@ -211,12 +262,16 @@ public class RoomDatabase
 		return fileContents;
 	}
 	
+	/*
+	 * Removes the specified file from the disk for the specified room folder.
+	 */
 	private void removeFileFromDiskForRoom(String code, String fileName) throws Exception
 	{
 		Path path = Paths.get("db", code, fileName);
 		boolean pathExists = Files.exists(path);
 		if (pathExists == false) throw new FileNotFoundException();
 		Files.delete(path);
+		// If the directory is empty delete the room folder.
 		boolean directoryEmpty = isDirectoryForRoomEmpty(code);
 		if (directoryEmpty)
 		{
@@ -225,12 +280,19 @@ public class RoomDatabase
 		}
 	}
 	
+	/**
+	 * Checks if the specified room folder is empty.
+	 */
 	private boolean isDirectoryForRoomEmpty(String code)
 	{
 		List<String> files = retrieveFilesFromDiskForRoom(code);
 		return files.size() == 0;
 	}
 	
+	/*
+	 * Retrieves the list of file names in the specified room folder
+	 * and sorts them by last modified.
+	 */
 	private List<String> retrieveFilesFromDiskForRoom(String code)
 	{
 		List<File> files = new LinkedList<File>();
@@ -255,12 +317,18 @@ public class RoomDatabase
 		return fileNames;
 	}
 	
+	/*
+	 * Sorts a list of files by last modified.
+	 */
 	private List<File> sortFilesByLastModified(List<File> files)
 	{
 		Collections.sort(files, Comparator.comparingLong(File::lastModified));
 		return files;
 	}
 	
+	/*
+	 * Converts a list of File objects to the list of their names.
+	 */
 	private List<String> getFileNamesFrom(List<File> files)
 	{
 		List<String> fileNames = new LinkedList<String>();
@@ -271,6 +339,10 @@ public class RoomDatabase
 		return fileNames;
 	}
 	
+	/*
+	 * Adds a room to the database using a synchronized, thread-safe
+	 * map.
+	 */
 	private void addRoom(String code, Room room)
 	{
 		Map<String, Room> map = Collections.synchronizedMap(rooms);
@@ -281,7 +353,11 @@ public class RoomDatabase
 			writeKeyPairToDisk(code, room.getName());
 		}
 	}
-		
+	
+	/*
+	 * Gets a room from the database using a synchronized, thread-safe
+	 * map.
+	 */
 	public Room getRoom(String code)
 	{
 		Map<String, Room> map = Collections.synchronizedMap(rooms);
@@ -291,6 +367,10 @@ public class RoomDatabase
 		}
 	}
 	
+	/*
+	 * Checks if a room code is contained in the database using a synchronized, thread-safe
+	 * map.
+	 */
 	private boolean containsCode(String code)
 	{
 		Map<String, Room> map = Collections.synchronizedMap(rooms);
@@ -300,6 +380,10 @@ public class RoomDatabase
 		}
 	}
 	
+	/*
+	 * Updates a room in the database using a synchronized, thread-safe
+	 * map.
+	 */
 	private void updateRoom(String code, Room room)
 	{
 		Map<String, Room> map = Collections.synchronizedMap(rooms);

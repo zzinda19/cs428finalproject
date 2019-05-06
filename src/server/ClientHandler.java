@@ -8,22 +8,26 @@ import java.util.Observable;
 import client.Packet;
 import client.PacketFlag;
 import model.Room;
-import utility.CorruptedPacketException;
-import utility.InvalidRoomCodeException;
-import utility.InvalidRoomNameException;
+import responders.DeleteResponder;
+import responders.DownloadResponder;
+import responders.FileResponder;
+import responders.JoinResponder;
+import responders.NewResponder;
+import responders.Responder;
 
+/*
+ * Client handler receives and processes all input by the client.
+ */
 public class ClientHandler extends Observable implements Runnable
 {
 	private ObjectInputStream in;
 	private ObjectOutputStream out;
-	
-	private RoomDatabase database;
+	private Responder responder;
 	
 	public ClientHandler(ObjectInputStream in, ObjectOutputStream out)
 	{
 		this.in = in;
 		this.out = out;
-		this.database = RoomDatabase.getDatabase();
 	}
 	
 	public void run()
@@ -63,54 +67,46 @@ public class ClientHandler extends Observable implements Runnable
 		}
 	}
 	
+	/**
+	 * Receives a packet, selects a response strategy,
+	 * responds to the request, and the sends the
+	 * response packet back to the Client.
+	 */
 	public void receiveAndRespond(Packet packet)
 	{
 		Packet response;
-		Room responseRoom;
-		byte[] responseFile;
+		boolean notifyServer = false;
 		PacketFlag flag = packet.getFlag();
 		try
 		{
 			switch (flag)
 			{
 				case DELETE:
-					response = new Packet(PacketFlag.ROOM);
-					responseRoom = deleteFile(packet);
-					response.setRoom(responseRoom);
-					setChanged();
-					notifyObservers(responseRoom);
-					send(response);
+					responder = new DeleteResponder();
+					notifyServer = true;
 					break;
 				case DOWNLOAD:
-					response = new Packet(PacketFlag.FILE);
-					responseFile = getFile(packet);
-					response.setFileContents(responseFile);
-					response.setFileName(packet.getFileName());
-					send(response);
+					responder = new DownloadResponder();
 					break;
 				case FILE:
-					response = new Packet(PacketFlag.ROOM);
-					responseRoom = addFileToRoom(packet);
-					response.setRoom(responseRoom);
-					setChanged();
-					notifyObservers(responseRoom);
-					send(response);
+					responder = new FileResponder();
+					notifyServer = true;
 					break;
 				case JOIN:
-					response = new Packet(PacketFlag.ROOM);
-					responseRoom = joinRoom(packet);
-					response.setRoom(responseRoom);
-					send(response);
+					responder = new JoinResponder();
 					break;
 				case NEW:
-					response = new Packet(PacketFlag.ROOM);
-					responseRoom = newRoom(packet);
-					response.setRoom(responseRoom);
-					send(response);
+					responder = new NewResponder();
 					break;
 				default:
 					break;
 			}
+			response = responder.respondTo(packet);
+			if (notifyServer)
+			{
+				updateServer(response.getRoom());
+			}
+			send(response);
 		}
 		catch (Exception e)
 		{
@@ -118,49 +114,9 @@ public class ClientHandler extends Observable implements Runnable
 		}
 	}
 	
-	private Room addFileToRoom(Packet packet) throws Exception
-	{
-		if (packet.getFlag() != PacketFlag.FILE) throw new CorruptedPacketException();
-		String code = packet.getMessage();
-		if (database.isValidCode(code) == false) throw new InvalidRoomCodeException();
-		database.addFileToRoom(code, packet.getFileName(), packet.getFileContents());
-		return database.getRoom(code);
-	}
-	
-	private Room joinRoom(Packet packet) throws Exception
-	{
-		if (packet.getFlag() != PacketFlag.JOIN) throw new CorruptedPacketException();
-		String code = packet.getMessage();
-		if (database.isValidCode(code) == false) throw new InvalidRoomCodeException();
-		return database.joinRoom(code);
-	}
-	
-	private Room newRoom(Packet packet) throws Exception
-	{
-		if (packet.getFlag() != PacketFlag.NEW) throw new CorruptedPacketException();
-		String name = packet.getMessage();
-		if (name.isEmpty()) throw new InvalidRoomNameException();
-		return database.newRoom(name);
-	}
-	
-	private byte[] getFile(Packet packet) throws Exception
-	{
-		if (packet.getFlag() != PacketFlag.DOWNLOAD) throw new CorruptedPacketException();
-		String code = packet.getMessage();
-		if (database.isValidCode(code) == false) throw new InvalidRoomCodeException();
-		String fileName = packet.getFileName();
-		return database.getFileForRoom(code, fileName);
-	}
-	
-	private Room deleteFile(Packet packet) throws Exception
-	{
-		if (packet.getFlag() != PacketFlag.DELETE) throw new CorruptedPacketException();
-		String code = packet.getMessage();
-		if (database.isValidCode(code) == false) throw new InvalidRoomCodeException();
-		String fileName = packet.getFileName();
-		return database.deleteFileForRoom(code, fileName);
-	}
-	
+	/*
+	 * Sends an error packet to the client.
+	 */
 	private void sendErrorMessage(Exception e)
 	{
 		Packet response = new Packet(PacketFlag.ERROR);
@@ -168,6 +124,22 @@ public class ClientHandler extends Observable implements Runnable
 		send(response);
 	}
 	
+	/*
+	 * Notifies the server that a room has changed so
+	 * that the server can notify all other client handlers.
+	 */
+	private void updateServer(Room room)
+	{
+		setChanged();
+		notifyObservers(room);
+	}
+	
+	/*
+	 * Updates the client with the specified room. If the
+	 * Client is not in this room the packet will be disregarded,
+	 * but if they are, then it allows for near-instantaneous updates
+	 * for all Clients in that room.
+	 */
 	public void updateClient(Room room)
 	{
 		Packet response = new Packet(PacketFlag.ROOM);

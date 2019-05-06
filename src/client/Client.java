@@ -24,6 +24,13 @@ import controller.RoomViewController;
 import controller.ViewController;
 import model.Room;
 
+/*
+ * Client is primary driver for the client-side program and
+ * the external context for the UI. Holds a JFrame with
+ * each of the respective Views, maintains a reference for
+ * each of the respective ViewControllers, and processes
+ * any input from the ViewControllers and sends it to the Server.
+ */
 public class Client implements Runnable, Observer
 {
 	private static final String title = "SpeechDrop";
@@ -37,6 +44,10 @@ public class Client implements Runnable, Observer
 	private JFrame frame;
 	private JPanel panel;
 	
+	//Current controller keeps track of which view and
+	//controller are currently being displayed to the user
+	//in order to know which Controller should handle
+	//packet responses from the server.
 	private ViewController currentController;
 	private LoginViewController loginViewController;
 	private MenuViewController menuViewController;
@@ -44,6 +55,9 @@ public class Client implements Runnable, Observer
 	
 	private final JFileChooser fileChooser;
 	
+	/*
+	 * Creates the UI Frame.
+	 */
 	public Client()
 	{
 		frame = new JFrame(title);
@@ -104,6 +118,7 @@ public class Client implements Runnable, Observer
 		loginViewController = new LoginViewController();
 		loginViewController.addObserver(this);
 		panel.add(LoginViewController.name, loginViewController.getView());
+		// Current controller initially starts at the Login Controller.
 		currentController = loginViewController;
 	}
 	
@@ -114,6 +129,11 @@ public class Client implements Runnable, Observer
 		panel.add(MenuViewController.name, menuViewController.getView());
 	}
 	
+	/*
+	 * Opens a connection with the Server once
+	 * given an IP by the Login Controller. Then
+	 * switches view/controller to the Main Menu.
+	 */
 	public void open(String ip)
 	{
 		try
@@ -124,6 +144,7 @@ public class Client implements Runnable, Observer
 			
 			new Thread(this).start();
 			
+			// Switch to menu.
 			currentController.clear();
 			showCard(MenuViewController.name);
 			currentController = menuViewController;
@@ -155,6 +176,10 @@ public class Client implements Runnable, Observer
 		}
 	}
 	
+	/*
+	 * Passes any received packet to the current controller
+	 * to be processed and handled by the view controllers.
+	 */
 	public void receive(Packet packet)
 	{
 		currentController.receive(packet);
@@ -175,11 +200,17 @@ public class Client implements Runnable, Observer
 		}
 	}
 	
+	/*
+	 * Adds a view to the UIFrame.
+	 */
 	public void addCardToPanel(JPanel card)
 	{
 		panel.add(card);
 	}
 	
+	/*
+	 * Displays the view with the specified name.
+	 */
 	public void showCard(String name)
 	{
 		currentController.clear();
@@ -187,6 +218,11 @@ public class Client implements Runnable, Observer
 		layout.show(panel, name);
 	}
 	
+	/*
+	 * Initializes the Room when prompted by the Menu,
+	 * either after receiving a valid room code
+	 * or by creating a new room.
+	 */
 	private void initializeRoom(Room room)
 	{
 		roomViewController = new RoomViewController(room);
@@ -196,7 +232,10 @@ public class Client implements Runnable, Observer
 		currentController = roomViewController;
 	}
 
-	@Override
+	/*
+	 * Receives and processes commands from the
+	 * ViewControllers.
+	 */
 	public void update(Observable arg0, Object arg1)
 	{
 		Command command = (Command) arg1;
@@ -243,6 +282,10 @@ public class Client implements Runnable, Observer
 		
 	}
 	
+	/*
+	 * Helper method for creating a new packet with the selected
+	 * File to send to the server.
+	 */
 	private Packet encapsulateFileInPacket(String code, Path path) throws IOException
 	{
 		byte[] fileContents = Files.readAllBytes(path);
@@ -253,6 +296,11 @@ public class Client implements Runnable, Observer
 		return packet;
 	}
 	
+	/*
+	 * Helper method for handling when the user selects a file.
+	 * FileChooser needs a frame to be placed in, so these methods
+	 * go in the Client Class instead of the RoomViewController class.
+	 */
 	private Path selectFile()
 	{
 		int returnValue = fileChooser.showOpenDialog(this.frame);

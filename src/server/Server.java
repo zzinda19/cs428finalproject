@@ -12,6 +12,13 @@ import java.util.Observer;
 
 import model.Room;
 
+/*
+ * Centralized server class handles all connections from clients
+ * and spawns a ClientHandler thread for each. Implements the observer
+ * class to notify all Clients when a room is updated, allowing for
+ * real-time updates to every Client in a room when one Client adds
+ * or deletes a file.
+ */
 public class Server extends Thread implements Observer
 {
 	private static final int port = 6112;
@@ -57,7 +64,10 @@ public class Server extends Thread implements Observer
 		}
 	}
 
-	@Override
+	/*
+	 * Receives an updated room from one client and sends
+	 * it to all the rest.
+	 */
 	public void update(Observable arg0, Object arg1)
 	{
 		Room room = (Room) arg1;
